@@ -1,0 +1,329 @@
+Access Management System — Finalized Workflow & Architecture
+Goal
+Automate granting, updating, revoking, and manually adjusting user access based on payment transactions, plan changes, expiries, and admin overrides.
+
+2. Scheduled Jobs Overview
+A. Transaction Sync Job (every 15 or 30 minutes)
+Fetch transactions for past 20 minutes / 1 hour / 1 day (configurable).
+ Process each transaction using the logic in Section 3 below.
+
+C. Manual Updates (Ben Sheet → DB Sync)
+Admin-use job (Section 5).
+
+3. Access Logic for New, Existing, Upgrade, Downgrade
+3.1 New User
+Condition: No previous record of access for that user+script.
+Action:
+Grant access for the purchased script/plan.
+
+
+Insert record in DB.
+
+
+Update last_transaction_date and last_updated.
+
+
+Trigger welcome mail/API call (optional).
+
+
+
+3.2 Existing User — Upgrade or Downgrade
+Fetch the user's existing access record and compare:
+Case A: Transaction already processed
+If the new transaction’s date == existing last_transaction_date:
+Ignore to prevent duplicate granting.
+
+
+(Optional: Add confirmation layer to verify access delivered.)
+
+
+
+Case B: Transaction is new (different date)
+Scenario 1: Access previously expired
+Treat as fresh purchase.
+
+
+Grant access normally.
+
+
+Update expiry based on new plan.
+
+
+Add new scripts if the plan includes additional ones.
+
+
+Scenario 2: Access active — Stack or Modify
+If upgrade:
+
+
+Extend access days if plan includes stacking.
+
+
+Add new scripts included in upgraded plan.
+
+
+If downgrade:
+
+
+Ideally controlled via DB expiry:
+
+
+Do NOT revoke immediately.
+
+
+Allow existing access to expire naturally.
+
+
+New downgraded plan applies only after expiry.
+
+
+Always update:
+last_transaction_date
+
+
+last_updated
+
+
+
+5. Manual Intervention (Ben Sheet → DB Sync)
+Some payments are made directly to Ben outside the payment gateway.
+Google Sheet columns (required):
+username
+
+
+email
+
+
+expiry
+
+
+script_id
+
+
+notes / payment reason
+
+
+Manual Flow:
+Ben updates sheet with new/updated entries.
+
+
+Scheduled sync job (e.g., every hour) reads the sheet.
+
+
+For each row:
+
+
+If user exists → Update expiry.
+
+
+If new user → Insert and grant.
+
+
+Set source = “Manual-Ben”.
+
+
+Update DB last_updated.
+
+
+Reason: These payments do not hit the main transaction DB.
+
+
+
+- Algorithm
+    
+        ## Access Management System - Algorithm
+        
+        ### Core Schedulers
+        
+        1. Transaction Processor (Every 15-30 min)
+        
+        2. Expiry Handler (Daily at 00:00 UTC)
+        
+        3. Manual Intervention (On-demand/Scheduled)
+        
+        ---
+        
+        ### Main Processing Flow
+        
+        ### A. Transaction Processing
+        
+        `1. Fetch transactions from last time window
+           - Get successful/completed transactions only
+           - Sort by date (oldest first)
+        
+        2. For each transaction:
+           
+           a) Check if already processed
+              - Compare transaction_id or transaction_date
+              - Skip if already handled
+           
+           b) Identify user type:
+              - NEW: User doesn't exist
+              - ACTIVE: User has active subscription
+              - EXPIRED: User subscription expired
+           
+           c) Route to handler:
+              → NEW USER: Grant access, set expiry
+              → ACTIVE USER (upgrade): Add new scripts, extend expiry (stack days)
+              → ACTIVE USER (downgrade): Update expiry, mark scripts for removal
+              → EXPIRED USER: Reactivate with new expiry
+           
+           d) Update tracking:
+              - Store last_processed_transaction_id
+              - Store last_processed_date
+           
+           e) Send confirmation email`
+        
+        ### B. Grant Access Function
+        
+        `FUNCTION grant_access(user, script, expiry):
+            
+            1. Validate inputs (user, script, expiry)
+            
+            2. Start database transaction
+            
+            3. Update/Insert access record in DB
+            
+            4. Call external API to grant access
+               - If fails: rollback DB, add to retry queue
+            
+            5. Commit transaction
+            
+            6. Log action in audit trail
+            
+            7. Return success/failure
+        
+        FAILURE HANDLING:
+            - Rollback any partial changes
+            - Log error with full context
+            - Add to retry queue
+            - Alert admin if critical`
+        
+        ### C. Expiry Management
+        
+        `1. Find all expired access (expiry_date <= today)
+        
+        2. For each expired access:
+           
+           a) Check no pending payments (safety check)
+           
+           b) Call external API to revoke access
+           
+           c) Update DB: status = 'REVOKED'
+           
+           d) Log action
+           
+           e) Send expiry notification
+        
+        3. Send pre-expiry warnings (1 day before)
+           - Email users
+           - Notify admin`
+        
+        ### D. Username Changes
+        
+        `1. Get unprocessed username changes
+        
+        2. For each change:
+           
+           a) Get user's active scripts
+           
+           b) For each script:
+              - Revoke access for old_username
+              - Grant access for new_username
+           
+           c) Update DB with new username
+           
+           d) Mark change as processed`
+        
+        ### E. Manual Intervention (Ben's Sheet)
+        
+        `1. Read Google Sheet rows
+        
+        2. For each row:
+           
+           a) Validate data (username, email, script, expiry)
+           
+           b) Skip if already processed
+           
+           c) Find/Create user
+           
+           d) Grant access with provided expiry
+           
+           e) Mark row as processed in sheet
+           
+           f) Log in manual_access_log
+        
+        3. Send summary report to Ben`
+        
+        ---
+        
+        ## Key Failure Scenarios
+        
+        ### 1. **API Failure**
+        
+        - Rollback DB changes
+        - Add to retry queue
+        - Alert admin after multiple failures
+        
+        ### 2. **Database Failure**
+        
+        - Automatic rollback
+        - Log error
+        - Retry once, then alert
+        
+        ### 3. **Duplicate Processing**
+        
+        - Check transaction_id before processing
+        - Skip silently if duplicate
+        - Log for tracking
+        
+        ### 4. **Partial Failures (Multiple Scripts)**
+        
+        - Continue processing remaining scripts
+        - Log successful + failed separately
+        - Retry failed ones later
+        
+        ### 5. **Payment Sync Issues**
+        
+        - Daily reconciliation job
+        - Compare payment gateway vs DB
+        - Process missing transactions
+        
+        ---
+        
+        ## Retry Mechanism (Generic)
+        
+        `FOR failed operations:
+            
+            1. Add to retry_queue with:
+               - Operation details
+               - Error message
+               - Attempt count
+               - Next retry time
+            
+            2. Background job processes retry_queue:
+               - Exponential backoff (5min, 15min, 1hr, 4hr)
+               - Max 5 attempts
+               - Alert admin after max attempts
+            
+            3. Manual queue for persistent failures`
+        
+        ---
+        
+        ## Monitoring with logging
+        
+        **Critical Alerts:**
+        
+        - API down > 15 min
+        - High failure rate (>10%)
+        - Revocation failures
+        
+        **Daily Reports:**
+        
+        - Processed transactions count
+        - Success/failure stats
+        - Expiring users list
+        - Retry queue size
+        
+        ---
+        

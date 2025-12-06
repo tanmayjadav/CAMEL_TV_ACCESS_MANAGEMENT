@@ -1,0 +1,2 @@
+{"timestamp": "2025-12-06T21:47:57", "level": "INFO", "name": "httpx", "message": "HTTP Request: GET https://camelfinance.co.uk/wp-json/memberpress/v1/all-user-transactions?api_token=camelfinance_api_2025 \"HTTP/1.1 403 Forbidden\""}
+{"timestamp": "2025-12-06T21:52:43", "level": "INFO", "name": "httpx", "message": "HTTP Request: GET https://camelfinance.co.uk/wp-json/memberpress/v1/all-user-transactions?api_token=camelfinance_api_2025 \"HTTP/1.1 403 Forbidden\""}
