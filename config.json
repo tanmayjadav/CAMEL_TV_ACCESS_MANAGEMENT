@@ -3,7 +3,7 @@
     "base_url": "https://camelfinance.co.uk/wp-json/memberpress/v1",
     "transactions_endpoint": "/all-user-transactions",
     "since_param": "since",
-    "transactions_limit": 100000,
+    "transactions_limit": null,
     "status_filter": [
       "complete",
       "confirmed"
@@ -20,7 +20,7 @@
     "grant_endpoint": "/api/v1/access/grant",
     "update_endpoint": "/api/v1/access/update",
     "list_users_endpoint": "/api/v1/access/scriptUsers/{scriptId}",
-    "validate_endpoint": "/api/v1/access/validate/{username}",
+    "validate_endpoint": "/api/v1/checkTVUsername/{username}",
     "api_key_header": "x-api-key",
     "api_key": "tv_api_4ec751fe5bb7bdc3a62a98442c079f0ed70ea57adccb84436deadc8b5e0fecbf",
     "timeout_seconds": 30,
@@ -32,28 +32,22 @@
     ]
   },
   "products": {
-    "2291": {
+    "2283": {
       "script_id": "692e812f58fbafaa7a3610cd",
       "duration_days": 30,
       "subscription_type": "Monthly",
       "stacking_allowed": true
     },
-    "5674": {
-      "script_id": "692e812f58fbafaa7a3610cd",
-      "duration_days": 60,
-      "subscription_type": "BiMonthly",
-      "stacking_allowed": true
-    },
-    "5675": {
-      "script_id": "SCRIPT_5675",
+    "2291": {
+      "script_id": "692e80d058fbafaa7a3610c2",
       "duration_days": 365,
       "subscription_type": "Yearly",
       "stacking_allowed": true
     }
   },
   "scheduler": {
-    "interval_minutes": 15,
-    "dry_run": true
+    "interval_minutes": 2,
+    "dry_run": false
   },
   "logging": {
     "level": "INFO"

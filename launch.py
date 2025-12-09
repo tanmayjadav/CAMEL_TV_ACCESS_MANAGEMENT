@@ -20,14 +20,16 @@ def _run_api(host: str, port: int, reload: bool) -> None:
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)
 
 
-def _run_scheduler() -> None:
-    asyncio.run(start_scheduler())
+def _run_scheduler(config_path: Optional[str] = None) -> None:
+    asyncio.run(start_scheduler(config_path))
 
 
-def _run_once(config_path: Optional[str], dry_run: bool) -> None:
+async def _run_once(config_path: Optional[str], dry_run: bool) -> None:
     settings = load_settings(config_path)
-    asyncio.run(run_sync(settings, dry_run=dry_run))
-
+    if dry_run:
+        settings.scheduler.dry_run = True
+    await run_sync(settings)
+    
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -87,9 +89,9 @@ def main() -> None:
     if args.command == "api":
         _run_api(args.host, args.port, args.reload)
     elif args.command == "scheduler":
-        _run_scheduler()
+        _run_scheduler(args.config)
     elif args.command == "sync":
-        _run_once(args.config, args.dry_run)
+        asyncio.run(_run_once(args.config, args.dry_run))
     else:
         raise SystemExit(f"Unknown command: {args.command}")
 

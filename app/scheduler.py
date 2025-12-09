@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -11,15 +12,15 @@ from .sync import run_sync
 logger = logging.getLogger(__name__)
 
 
-async def start_scheduler() -> None:
-    settings = get_settings()
+async def start_scheduler(config_path: Optional[str] = None) -> None:
+    settings = get_settings(config_path)
     scheduler = AsyncIOScheduler()
 
     scheduler.add_job(
         run_sync,
         "interval",
         minutes=settings.scheduler.interval_minutes,
-        kwargs={"settings": settings, "dry_run": settings.scheduler.dry_run},
+        kwargs={"settings": settings},
         id="access_sync",
         max_instances=1,
         coalesce=True,

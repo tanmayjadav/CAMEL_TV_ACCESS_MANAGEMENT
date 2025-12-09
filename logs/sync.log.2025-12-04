@@ -1,2 +1,0 @@
-{"timestamp": "2025-12-04T14:35:21", "level": "ERROR", "name": "app.email", "message": "email.failed", "to": "brandedgroup21@gmail.com", "error": "(535, b'5.7.8 Username and Password not accepted. For more information, go to\\n5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-7e2a0533f08sm1494205b3a.23 - gsmtp')"}
-{"timestamp": "2025-12-04T14:56:44", "level": "INFO", "name": "app.email", "message": "email.sent", "to": "brandedgroup21@gmail.com", "bcc": []}

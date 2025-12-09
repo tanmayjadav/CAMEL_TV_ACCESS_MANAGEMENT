@@ -11,7 +11,6 @@ from itertools import islice
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Sequence, Tuple, Union
 
-import httpx
 from app import load_settings
 from app.io import ApiError, TradingViewClient
 from app.logic import NormalizedTransaction, normalize_transactions
@@ -29,7 +28,11 @@ async def _fetch_transactions_source(
     source: Union[Path, str],
     settings,
 ) -> List[NormalizedTransaction]:
-    if isinstance(source, Path):
+    path = Path(source) if not isinstance(source, Path) else source
+    raw_text = path.read_text(encoding="utf-8")
+    raw = json.loads(raw_text)
+    
+    '''    if isinstance(source, Path):
         raw_text = source.read_text(encoding="utf-8")
         raw = json.loads(raw_text)
     else:
@@ -39,8 +42,7 @@ async def _fetch_transactions_source(
         async with httpx.AsyncClient(timeout=settings.wordpress.timeout_seconds) as client:
             response = await client.get(source, params=params)
             response.raise_for_status()
-            raw = response.json()
-
+            raw = response.json()'''
     if not isinstance(raw, list):
         raise RuntimeError(
             f"Expected a list of transactions, got {type(raw).__name__} from {source}"
@@ -239,8 +241,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--transactions",
         type=str,
-        default="https://camelfinance.co.uk/wp-json/memberpress/v1/all-user-transactions",
-        help="Path or URL to the transactions JSON feed",
+        default="C:\\Tanmay Jadav\\Variance\\inviteOnlyScript\\Others\\transactions.json",
+        help="Path to the transactions JSON file",
     )
     parser.add_argument(
         "--csv",
@@ -286,3 +288,17 @@ if __name__ == "__main__":
         )
     )
 
+'''Core processing (process_batch 500)
+
+For each transaction in the batch:
+
+1. Call TradingViewClient.validate_username.
+    - If it fails or validUser is false, log and skip.
+2. Use the verified username (falls back to original).
+3. Build the TradingView grant payload:
+    - scriptId, username, email, expiry (date), subscription type, WordPress username, remarks.
+4. Attempt grant_access.
+    - On failure, log and increment summary counters.
+5. Check if the username already exists in the CSV set:
+    - If yes, treat it as a refresh; log but don’t append.
+    - If no, append a new CSV row (using _extract_csv_row), add to the set, and log as a new grant.'''

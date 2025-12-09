@@ -14,7 +14,7 @@ class WordPressConfig(BaseModel):
     base_url: HttpUrl
     transactions_endpoint: str = "/users/transactions"
     since_param: str = "since"
-    transactions_limit: int = Field(..., ge=1)
+    transactions_limit: Optional[int] = Field(default=None, ge=1)
     status_filter: List[str] = Field(default_factory=lambda: ["complete", "confirmed"])
     timeout_seconds: int = Field(default=30, ge=1)
     api_key: Optional[str] = None
@@ -106,25 +106,21 @@ def load_settings(config_path: Optional[str] = None) -> Settings:
 
 
 def configure_logging(level: str, logs_dir: Optional[pathlib.Path] = None) -> None:
-    class JsonFormatter(logging.Formatter):
+    log_format = "%(asctime)s %(levelname)s %(name)s : %(message)s"
+
+    class PlainFormatter(logging.Formatter):
         def format(self, record: logging.LogRecord) -> str:
-            payload = {
-                "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-                "level": record.levelname,
-                "name": record.name,
-                "message": record.getMessage(),
-            }
-            if record.exc_info:
-                payload["exc_info"] = self.formatException(record.exc_info)
-            if record.__dict__.get("extra_data"):
-                payload.update(record.__dict__["extra_data"])
-            return json.dumps(payload)
+            message = super().format(record)
+            extra = record.__dict__.get("extra_data")
+            if extra:
+                message = f"{message} {extra}"
+            return message
 
     logging_level = getattr(logging, level.upper(), logging.INFO)
     handlers: List[logging.Handler] = []
 
     stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(JsonFormatter())
+    stream_handler.setFormatter(PlainFormatter(log_format))
     handlers.append(stream_handler)
 
     if logs_dir:
@@ -133,7 +129,7 @@ def configure_logging(level: str, logs_dir: Optional[pathlib.Path] = None) -> No
             filename=str(logs_dir / "sync.log"), when="midnight", backupCount=730, encoding="utf-8"
         )
         file_handler.suffix = "%Y-%m-%d"
-        file_handler.setFormatter(JsonFormatter())
+        file_handler.setFormatter(PlainFormatter(log_format))
         handlers.append(file_handler)
 
     logging.basicConfig(level=logging_level, handlers=handlers, force=True)

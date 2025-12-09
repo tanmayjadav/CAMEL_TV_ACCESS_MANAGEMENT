@@ -46,10 +46,11 @@ class WordPressClient:
         headers = {}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
-        params: Dict[str, Any] = {"limit": self._limit}
+        params: Dict[str, Any] = {}
+        if self._limit is not None:
+            params["limit"] = self._limit
         if since:
-            aware = since if since.tzinfo else since.replace(tzinfo=timezone.utc)
-            params[self._since_param] = int(aware.astimezone(timezone.utc).timestamp())
+            params[self._since_param] = since.astimezone(timezone.utc).isoformat()
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.get(
                 url, params=params, headers=headers, auth=self._auth
@@ -139,8 +140,8 @@ class TradingViewClient:
         endpoint = self._validate_endpoint.replace("{username}", username)
         url = _join_url(self._base_url, endpoint)
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.get(url, headers=self._headers)
             try:
+                response = await client.get(url, headers=self._headers)
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 logger.error(
@@ -152,7 +153,21 @@ class TradingViewClient:
                         }
                     },
                 )
-                return {"validUser": False, "verifiedUserName": "", "allUserSuggestions": []}
+                raise ApiError(
+                    "TradingView validate username failed",
+                    status_code=exc.response.status_code,
+                ) from exc
+            except httpx.HTTPError as exc:
+                logger.error(
+                    "tradingview.validate_transport_error",
+                    extra={
+                        "extra_data": {
+                            "username": username,
+                            "error": str(exc),
+                        }
+                    },
+                )
+                raise ApiError("TradingView validate username failed") from exc
         payload = response.json()
         if isinstance(payload, dict):
             return payload
@@ -160,7 +175,7 @@ class TradingViewClient:
             "tradingview.unexpected_validation_response",
             extra={"extra_data": {"payload_type": type(payload).__name__}},
         )
-        return {"validUser": False, "verifiedUserName": "", "allUserSuggestions": []}
+        raise ApiError("Unexpected TradingView validation response")
 
     async def grant_access(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         return await self._post_with_retry(

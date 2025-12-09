@@ -130,24 +130,28 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
 
     async def load_or_bootstrap(script_id: str) -> MasterData:
         master = load_master(settings, script_id)
-        if not master.users and master.last_synced_at is None:
-            try:
-                users = await tv_client.list_script_users(script_id)
-                master = bootstrap_from_tradingview(settings, script_id, users)
-                logger.info(
-                    "masterdata.bootstrap",
-                    extra={"extra_data": {"scriptId": script_id, "count": len(users)}},
-                )
-            except ApiError as exc:
-                logger.warning(
-                    "masterdata.bootstrap_failed",
-                    extra={
-                        "extra_data": {
-                            "scriptId": script_id,
-                            "error": str(exc),
-                        }
-                    },
-                )
+        # Bootstrap from TradingView is disabled per current requirements.
+        # Previously we fetched existing script users here so the local masterData file would
+        # start with TradingView’s current state. If we need that behavior again, uncomment:
+        #
+        # if not master.users and master.last_synced_at is None:
+        #     try:
+        #         users = await tv_client.list_script_users(script_id)
+        #         master = bootstrap_from_tradingview(settings, script_id, users)
+        #         logger.info(
+        #             "masterdata.bootstrap",
+        #             extra={"extra_data": {"scriptId": script_id, "count": len(users)}},
+        #         )
+        #     except ApiError as exc:
+        #         logger.warning(
+        #             "masterdata.bootstrap_failed",
+        #             extra={
+        #                 "extra_data": {
+        #                     "scriptId": script_id,
+        #                     "error": str(exc),
+        #                 }
+        #             },
+        #         )
         return master
 
     script_ids = {product.script_id for product in settings.products.values()}
@@ -187,9 +191,12 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
         "dry_run_skipped": 0,
         "since": since_timestamp.isoformat() if since_timestamp else None,
         "dry_run_calls": 0,
+        "validation_failed": 0,
     }
 
     latest_seen: Dict[str, datetime] = {}
+
+    separator_line = "*" * 98
 
     async def get_master(script_id: str) -> MasterData:
         if script_id in master_cache:
@@ -198,7 +205,20 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
         master_cache[script_id] = master
         return master
 
-    for txn in normalized:
+    total_transactions = len(normalized)
+
+    for index, txn in enumerate(normalized, start=1):
+        logger.info(separator_line)
+        logger.info(
+            f"Processing user {txn.wp_user_id} ({index}/{total_transactions})"
+        )
+        logger.info(
+            "TV username=%s product_id=%s script_id=%s",
+            txn.username,
+            txn.product_id,
+            txn.script_id,
+        )
+
         master = await get_master(txn.script_id)
 
         current_seen = latest_seen.get(txn.script_id)
@@ -207,15 +227,9 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
 
         if txn.transaction_id in master.processed_transactions:
             summary["skipped"] += 1
-            logger.debug(
-                "transaction.already_processed",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": txn.username,
-                        "scriptId": txn.script_id,
-                    }
-                },
+            logger.info(
+                "Skipping transaction %s (already processed)",
+                txn.transaction_id,
             )
             continue
 
@@ -226,15 +240,9 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             summary["skipped"] += 1
             master.register_processed(txn.transaction_id)
             logger.info(
-                "transaction.skipped",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "reason": action.reason,
-                        "username": txn.username,
-                        "scriptId": txn.script_id,
-                    }
-                },
+                "Transaction %s skipped (%s)",
+                txn.transaction_id,
+                action.reason or "reason not specified",
             )
             continue
 
@@ -248,34 +256,28 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             )
             master.register_processed(txn.transaction_id)
             logger.warning(
-                "transaction.manual_review",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": txn.username,
-                        "scriptId": txn.script_id,
-                        "reason": action.reason,
-                    }
-                },
+                "Transaction %s moved to manual review (%s)",
+                txn.transaction_id,
+                action.reason or "manual review",
             )
             continue
 
         if not action.expires_at:
             summary["failed"] += 1
             logger.error(
-                "transaction.invalid_action",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": txn.username,
-                        "scriptId": txn.script_id,
-                        "action": action.type,
-                    }
-                },
+                "Transaction %s has no expiry; skipping", txn.transaction_id
             )
             continue
 
-        validation_result = await tv_client.validate_username(txn.username)
+        try:
+            validation_result = await tv_client.validate_username(txn.username)
+        except ApiError as exc:
+            summary["validation_failed"] += 1
+            logger.error(
+                "Validation error for %s (%s)", txn.username, txn.transaction_id
+            )
+            continue
+
         if not validation_result.get("validUser"):
             if not any(
                 entry.transaction_id == txn.transaction_id for entry in master.manual_review
@@ -294,14 +296,9 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             summary["manual_review"] += 1
             master.register_processed(txn.transaction_id)
             logger.warning(
-                "transaction.invalid_username",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": txn.username,
-                        "scriptId": txn.script_id,
-                    }
-                },
+                "TradingView returned invalid user for %s (%s)",
+                txn.username,
+                txn.transaction_id,
             )
             continue
 
@@ -316,18 +313,12 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
 
         if dry_run:
             logger.info(
-                "dry_run.grant_skipped",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": effective_username,
-                        "scriptId": txn.script_id,
-                        "action": action.type,
-                        "payload": payload,
-                    }
-                },
+                "Dry run: would call TradingView %s for %s",
+                action.type,
+                effective_username,
             )
             summary["dry_run_skipped"] += 1
+            continue
         else:
             try:
                 await execute_tv_action(action.type, payload, summary)
@@ -342,28 +333,15 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
                     )
                 )
                 logger.error(
-                    "transaction.grant_failed",
-                    extra={
-                        "extra_data": {
-                            "transactionId": txn.transaction_id,
-                            "username": effective_username,
-                            "scriptId": txn.script_id,
-                            "error": str(exc),
-                        }
-                    },
+                    "TradingView call failed for %s (%s)",
+                    effective_username,
+                    txn.transaction_id,
                 )
                 continue
 
         if dry_run:
             logger.info(
-                "dry_run.skip_state_update",
-                extra={
-                    "extra_data": {
-                        "transactionId": txn.transaction_id,
-                        "username": effective_username,
-                        "scriptId": txn.script_id,
-                    }
-                },
+                "Dry run: skipping state update for %s", effective_username
             )
             summary["skipped"] += 1
             continue
@@ -405,16 +383,10 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             summary["stacked"] += 1
 
         logger.info(
-            "transaction.processed",
-            extra={
-                "extra_data": {
-                    "transactionId": txn.transaction_id,
-                    "username": effective_username,
-                    "scriptId": txn.script_id,
-                    "action": action.type,
-                    "expiry": action.expires_at.isoformat(),
-                }
-            },
+            "Processed transaction %s action=%s expiry=%s",
+            txn.transaction_id,
+            action.type,
+            action.expires_at.isoformat(),
         )
 
     for script_id, master in master_cache.items():
