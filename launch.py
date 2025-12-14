@@ -13,6 +13,14 @@ except ImportError:  # pragma: no cover
 from app import configure_logging, load_settings, run_sync
 from app.scheduler import start_scheduler
 
+''' Later to add in config.json
+ "email": {
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 465,
+    "smtp_user": "noreply@camelfinance.co.uk",
+    "smtp_password": "",
+    "from_email": "noreply@camelfinance.co.uk"
+  }'''
 
 def _run_api(host: str, port: int, reload: bool) -> None:
     if uvicorn is None:

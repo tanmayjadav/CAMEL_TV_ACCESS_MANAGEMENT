@@ -168,12 +168,17 @@ def normalize_transactions(
             transaction.expires_at_dt,
         )
 
-        username = (
-            transaction.user.username if transaction.user and transaction.user.username else None
-        ) or transaction.user_login or raw.get("user_login")
-        if not username:
+        meta_username = None
+        if transaction.user_meta:
+            candidate = transaction.user_meta.get("tradingview_username")
+            if isinstance(candidate, str):
+                candidate = candidate.strip()
+                if candidate:
+                    meta_username = candidate
+
+        if not meta_username:
             logger.warning(
-                "transaction.missing_username",
+                "transaction.missing_tradingview_username",
                 extra={
                     "extra_data": {
                         "transactionId": transaction.transaction_id,
@@ -182,6 +187,8 @@ def normalize_transactions(
                 },
             )
             continue
+
+        username = meta_username
 
         email = (
             transaction.user.email if transaction.user and transaction.user.email else None
@@ -227,6 +234,13 @@ def normalize_transactions(
         if not remarks:
             remarks = "paid" if status_value.lower() == "complete" else status_value or "paid"
 
+        wp_username = (
+            transaction.user_login
+            or raw.get("user_login")
+            or (transaction.user.username if transaction.user and transaction.user.username else None)
+            or username
+        )
+
         normalized.append(
             NormalizedTransaction(
                 transaction_id=transaction.transaction_id,
@@ -234,7 +248,7 @@ def normalize_transactions(
                 script_id=product.script_id,
                 username=username,
                 email=email,
-                wp_username=username,
+                wp_username=wp_username,
                 wp_user_id=str(wp_user_id),
                 display_name=display_name,
                 created_at=created_at,
