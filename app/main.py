@@ -15,5 +15,7 @@ async def health_check() -> dict:
 
 @app.post("/sync")
 async def trigger_sync(dry_run: bool = False, settings: Settings = Depends(get_settings)) -> dict:
-    return await run_sync(settings, dry_run=dry_run)
+    if dry_run:
+        settings.scheduler.dry_run = True
+    return await run_sync(settings)
 

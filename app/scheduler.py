@@ -12,8 +12,10 @@ from .sync import run_sync
 logger = logging.getLogger(__name__)
 
 
-async def start_scheduler(config_path: Optional[str] = None) -> None:
+async def start_scheduler(config_path: Optional[str] = None, dry_run: Optional[bool] = None) -> None:
     settings = get_settings(config_path)
+    if dry_run is not None:
+        settings.scheduler.dry_run = dry_run
     scheduler = AsyncIOScheduler()
 
     scheduler.add_job(

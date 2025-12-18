@@ -28,8 +28,8 @@ def _run_api(host: str, port: int, reload: bool) -> None:
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)
 
 
-def _run_scheduler(config_path: Optional[str] = None) -> None:
-    asyncio.run(start_scheduler(config_path))
+def _run_scheduler(config_path: Optional[str] = None, dry_run: bool = False) -> None:
+    asyncio.run(start_scheduler(config_path, dry_run=dry_run if dry_run else None))
 
 
 async def _run_once(config_path: Optional[str], dry_run: bool) -> None:
@@ -55,11 +55,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override logging level (INFO, DEBUG, etc.)",
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Log-only mode (no TradingView mutations) for sync command",
-    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -72,14 +67,24 @@ def parse_args() -> argparse.Namespace:
         help="Enable auto-reload (development only)",
     )
 
-    subparsers.add_parser(
+    scheduler_parser = subparsers.add_parser(
         "scheduler",
         help="Run the APScheduler loop using interval from config.json",
     )
+    scheduler_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Override config and run in dry-run mode (no TradingView mutations)",
+    )
 
-    subparsers.add_parser(
+    sync_parser = subparsers.add_parser(
         "sync",
         help="Execute a single sync run immediately and exit",
+    )
+    sync_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Log-only mode (no TradingView mutations)",
     )
 
     return parser.parse_args()
@@ -97,7 +102,7 @@ def main() -> None:
     if args.command == "api":
         _run_api(args.host, args.port, args.reload)
     elif args.command == "scheduler":
-        _run_scheduler(args.config)
+        _run_scheduler(args.config, getattr(args, 'dry_run', False))
     elif args.command == "sync":
         asyncio.run(_run_once(args.config, args.dry_run))
     else:
