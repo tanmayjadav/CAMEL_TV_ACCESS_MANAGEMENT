@@ -213,8 +213,9 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             f"Processing user {txn.wp_user_id} ({index}/{total_transactions})"
         )
         logger.info(
-            "TV username=%s product_id=%s script_id=%s",
+            "TV username=%s email=%s product_id=%s script_id=%s ",
             txn.username,
+            txn.email,
             txn.product_id,
             txn.script_id,
         )
