@@ -26,7 +26,7 @@ def _chunked(seq: list, size: int):
 
 
 def parse_expiry(expiry_str: str) -> Optional[str]:
-    """Parse expiry date string and return ISO format date string (like compare_access.py)"""
+    """Parse expiry date string and return ISO format date string"""
     if not expiry_str:
         return None
     try:
@@ -133,30 +133,6 @@ def _build_transaction_lookup(raw_transactions: List[Dict]) -> Dict[str, Dict]:
                     lookup[username_lower] = txn_data.copy()
                 elif not existing['email'] and email:
                     lookup[username_lower] = txn_data.copy()
-        
-        # Add to lookup by user_login (if exists and different from tradingview_username)
-        if user_login:
-            username_lower = user_login.lower()
-            # Only add if different from tradingview_username (to avoid duplicates)
-            if not tv_username_meta or username_lower != tv_username_meta.lower():
-                existing = lookup.get(username_lower)
-                
-                if not existing:
-                    lookup[username_lower] = txn_data.copy()
-                else:
-                    # Update if this transaction has a later expiry
-                    if expiry_date and existing['expiry']:
-                        try:
-                            existing_date = datetime.fromisoformat(existing['expiry']).date()
-                            new_date = datetime.fromisoformat(expiry_date).date()
-                            if new_date > existing_date:
-                                lookup[username_lower] = txn_data.copy()
-                        except:
-                            pass
-                    elif expiry_date and not existing['expiry']:
-                        lookup[username_lower] = txn_data.copy()
-                    elif not existing['email'] and email:
-                        lookup[username_lower] = txn_data.copy()
     
     return lookup
 
@@ -267,8 +243,24 @@ async def process_user_batch(
             continue
         
         if expiry_dt < now:
-            # Expired - skip
+            # Expired - add to CSV but skip grant
+            email = txn_info.get('email', '')
+            transaction_id = txn_info.get('transaction_id', '')
+            created_at = txn_info.get('created_at', '')
+            user_login = txn_info.get('user_login', '')
+            
+            # Append expired user to grant CSV
+            _append_grant_csv(
+                grant_csv_path,
+                tv_username,
+                email,
+                expiry_date_str,
+                transaction_id,
+                created_at,
+                user_login,
+            )
             summary["expired_skipped"] += 1
+            grant_csv_usernames.add(username_key)  # Mark as processed to avoid duplicates
             continue
         
         # Active user - will be processed
