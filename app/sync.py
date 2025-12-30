@@ -172,10 +172,9 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
                 extra={"extra_data": {"action": action_type, "payload": payload}},
             )
             return
-        if action_type == "grant_new":
-            await tv_client.grant_access(payload)
-        else:
-            await tv_client.update_access(payload)
+        # Use grant_access for all actions since the API only has a grant endpoint
+        # The grant endpoint can handle both new grants and updates/extensions
+        await tv_client.grant_access(payload)
 
     raw_transactions = await wp_client.fetch_transactions(since=since_timestamp)
     normalized = normalize_transactions(raw_transactions, settings)
