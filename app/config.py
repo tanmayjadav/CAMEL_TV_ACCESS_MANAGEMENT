@@ -58,8 +58,6 @@ class EmailConfig(BaseModel):
 class SchedulerConfig(BaseModel):
     interval_minutes: int = Field(default=15, ge=1)
     dry_run: bool = False
-    dry_run: bool = False
-
 
 class LoggingConfig(BaseModel):
     level: str = Field(default="INFO")
@@ -70,6 +68,12 @@ class PathConfig(BaseModel):
     logs_dir: str = "logs"
 
 
+class DiscordConfig(BaseModel):
+    webhook_url: Optional[str] = None
+    author: str = "Access Sync Bot"
+    enabled: bool = True
+
+
 class Settings(BaseModel):
     wordpress: WordPressConfig
     tradingview: TradingViewConfig
@@ -78,6 +82,7 @@ class Settings(BaseModel):
     logging: LoggingConfig = LoggingConfig()
     paths: PathConfig = PathConfig()
     email: Optional[EmailConfig] = None
+    discord: Optional[DiscordConfig] = None
 
     def product_for(self, product_id: str) -> Optional[ProductConfig]:
         return self.products.get(str(product_id))

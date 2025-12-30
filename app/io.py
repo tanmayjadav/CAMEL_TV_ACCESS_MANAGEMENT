@@ -67,6 +67,22 @@ class WordPressClient:
                         }
                     },
                 )
+                # Send Discord alert
+                try:
+                    from .discord_alert import send_discord_alert_if_enabled
+                    send_discord_alert_if_enabled(
+                        self._settings,
+                        message={
+                            "title": "WordPress API Failure",
+                            "description": "Failed to fetch transactions from WordPress API",
+                            "status_code": exc.response.status_code,
+                            "url": str(exc.request.url),
+                            "error": f"HTTP {exc.response.status_code}",
+                            "color": "red"
+                        }
+                    )
+                except Exception:
+                    pass  # Don't let Discord failures break the main flow
                 raise ApiError(
                     "WordPress transaction fetch failed",
                     status_code=exc.response.status_code,
