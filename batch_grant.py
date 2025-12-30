@@ -329,6 +329,7 @@ async def process_user_batch(
             "expiry": expiry_date_str,  # Already in YYYY-MM-DD format
             "subscription_type": subscription_type,
             "wp_username": user_login,
+            "remarks": "OP-M",
         }
         
         if dry_run:
