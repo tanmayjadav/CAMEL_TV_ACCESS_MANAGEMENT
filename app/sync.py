@@ -389,12 +389,19 @@ async def run_sync(settings: Optional[Settings] = None) -> Dict:
             action.expires_at.isoformat(),
         )
 
+    # Update last_processed_at for each script
     for script_id, master in master_cache.items():
         candidate = latest_seen.get(script_id)
         if candidate and (
             master.last_processed_at is None or candidate > master.last_processed_at
         ):
             master.last_processed_at = candidate
+    
+    # Update last_synced_at for all masters to indicate sync ran successfully
+    # This is important even when no transactions are processed, so health check knows sync is active
+    sync_completed_at = _utcnow()
+    for master in master_cache.values():
+        master.last_synced_at = sync_completed_at
 
     for master in master_cache.values():
         save_master(settings, master)
